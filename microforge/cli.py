@@ -1,131 +1,118 @@
 """CLI entrypoint for Microforge."""
 
+import argparse
+import sys
 from pathlib import Path
 from typing import Optional
 
-import typer  # type: ignore
-from rich.console import Console  # type: ignore
-from rich.panel import Panel  # type: ignore
-
 from microforge.generator import ProjectGenerator
 
-app = typer.Typer(
-    name="microforge",
-    help="A production-ready project generator for modern Python microservices.",
-    add_completion=False,
-)
-console = Console()
+
+def main():
+    """Main CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description="A production-ready project generator for modern Python microservices.",
+        prog="microforge"
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # New command
+    new_parser = subparsers.add_parser("new", help="Create a new microservice project")
+    new_parser.add_argument("name", help="Name of the microservice project")
+    new_parser.add_argument("--db", help="Database choice (postgres)")
+    new_parser.add_argument("--broker", default="redis", help="Message broker (redis, kafka)")
+    new_parser.add_argument("--ci", default="azure", help="CI/CD provider (azure, github, gitlab)")
+    new_parser.add_argument("--auth", help="Authentication type (oauth2)")
+    new_parser.add_argument("--git", action="store_true", help="Initialize Git repository")
+    
+    # Version command
+    version_parser = subparsers.add_parser("version", help="Show version information")
+    
+    args = parser.parse_args()
+    
+    if args.command == "new":
+        create_project(args)
+    elif args.command == "version":
+        show_version()
+    else:
+        parser.print_help()
 
 
-@app.command()
-def new(
-    name: str = typer.Argument(..., help="Name of the microservice project"),
-    db: Optional[str] = typer.Option(
-        None,
-        "--db",
-        help="Database choice (postgres)",
-    ),
-    broker: str = typer.Option(
-        "redis",
-        "--broker",
-        help="Message broker (redis, kafka)",
-    ),
-    ci: str = typer.Option(
-        "azure",
-        "--ci",
-        help="CI/CD provider (azure, github, gitlab)",
-    ),
-    auth: Optional[str] = typer.Option(
-        None,
-        "--auth",
-        help="Authentication type (oauth2)",
-    ),
-    git: bool = typer.Option(
-        False,
-        "--git",
-        help="Initialize Git repository",
-    ),
-) -> None:
+def create_project(args):
     """Create a new microservice project."""
     # Validate inputs
-    if broker not in ["redis", "kafka"]:
-        console.print("[red]Error: broker must be 'redis' or 'kafka'[/red]")
-        raise typer.Exit(1)
+    if args.broker not in ["redis", "kafka"]:
+        print("Error: broker must be 'redis' or 'kafka'")
+        sys.exit(1)
 
-    if ci not in ["azure", "github", "gitlab"]:
-        console.print("[red]Error: ci must be 'azure', 'github', or 'gitlab'[/red]")
-        raise typer.Exit(1)
+    if args.ci not in ["azure", "github", "gitlab"]:
+        print("Error: ci must be 'azure', 'github', or 'gitlab'")
+        sys.exit(1)
 
-    if db and db not in ["postgres"]:
-        console.print("[red]Error: db must be 'postgres'[/red]")
-        raise typer.Exit(1)
+    if args.db and args.db not in ["postgres"]:
+        print("Error: db must be 'postgres'")
+        sys.exit(1)
 
-    if auth and auth not in ["oauth2"]:
-        console.print("[red]Error: auth must be 'oauth2'[/red]")
-        raise typer.Exit(1)
+    if args.auth and args.auth not in ["oauth2"]:
+        print("Error: auth must be 'oauth2'")
+        sys.exit(1)
 
     # Display welcome message
-    console.print(
-        Panel.fit(
-            f"[bold cyan]Creating microservice: {name}[/bold cyan]",
-            border_style="cyan",
-        )
-    )
+    print(f"Creating microservice: {args.name}")
+    print()
 
     # Show configuration
-    console.print("\n[bold]Configuration:[/bold]")
-    console.print(f"  • Project name: [cyan]{name}[/cyan]")
-    console.print(f"  • Database: [cyan]{db or 'none'}[/cyan]")
-    console.print(f"  • Message broker: [cyan]{broker}[/cyan]")
-    console.print(f"  • CI/CD: [cyan]{ci}[/cyan]")
-    console.print(f"  • Authentication: [cyan]{auth or 'none'}[/cyan]")
-    console.print(f"  • Git init: [cyan]{git}[/cyan]")
-    console.print()
+    print("Configuration:")
+    print(f"  • Project name: {args.name}")
+    print(f"  • Database: {args.db or 'none'}")
+    print(f"  • Message broker: {args.broker}")
+    print(f"  • CI/CD: {args.ci}")
+    print(f"  • Authentication: {args.auth or 'none'}")
+    print(f"  • Git init: {args.git}")
+    print()
 
     # Create project
-    project_path = Path.cwd() / name
+    project_path = Path.cwd() / args.name
 
     if project_path.exists():
-        console.print(f"[red]Error: Directory '{name}' already exists[/red]")
-        raise typer.Exit(1)
+        print(f"Error: Directory '{args.name}' already exists")
+        sys.exit(1)
 
     try:
-        console.print("Generating project...")
+        print("Generating project...")
         
         generator = ProjectGenerator(
-            name=name,
+            name=args.name,
             path=project_path,
-            db=db,
-            broker=broker,
-            ci=ci,
-            auth=auth,
-            git_init=git,
+            db=args.db,
+            broker=args.broker,
+            ci=args.ci,
+            auth=args.auth,
+            git_init=args.git,
         )
 
         generator.generate()
 
-        console.print(
-            f"\n[green]Successfully created project: [bold cyan]{name}[/bold cyan]"
-        )
-        console.print("\n[bold]Next steps:[/bold]")
-        console.print(f"  1. cd {name}")
-        console.print("  2. poetry install")
-        console.print("  3. docker-compose up")
-        console.print("\n[dim]Happy coding![/dim]\n")
+        print(f"Successfully created project: {args.name}")
+        print()
+        print("Next steps:")
+        print(f"  1. cd {args.name}")
+        print("  2. poetry install")
+        print("  3. docker-compose up")
+        print()
+        print("Happy coding!")
 
     except Exception as e:
-        console.print(f"\n[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
-@app.command()
-def version() -> None:
+def show_version():
     """Show version information."""
     from microforge import __version__
-
-    console.print(f"Microforge version: [cyan]{__version__}[/cyan]")
+    print(f"Microforge version: {__version__}")
 
 
 if __name__ == "__main__":
-    app()
-
+    main()
