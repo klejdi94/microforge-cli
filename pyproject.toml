@@ -35,7 +35,7 @@ mypy = "^1.8.0"
 twine = "^4.0.0"
 
 [tool.poetry.scripts]
-microforge = "microforge.cli:app"
+microforge = "microforge.cli:main"
 
 [build-system]
 requires = ["poetry-core"]
