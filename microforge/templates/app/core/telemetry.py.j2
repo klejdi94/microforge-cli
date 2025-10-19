@@ -1,0 +1,67 @@
+"""OpenTelemetry configuration."""
+
+from opentelemetry import metrics, trace
+from opentelemetry.exporter.prometheus import PrometheusMetricReader
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from prometheus_client import start_http_server
+
+from app.core.config import settings
+
+
+def setup_telemetry() -> None:
+    """Configure OpenTelemetry tracing and metrics."""
+    # Create resource
+    resource = Resource.create(
+        {
+            "service.name": settings.OTEL_SERVICE_NAME,
+            "service.version": "0.1.0",
+            "deployment.environment": settings.APP_ENV,
+        }
+    )
+
+    # Setup tracing
+    tracer_provider = TracerProvider(resource=resource)
+    
+    # Add console exporter for development
+    if settings.DEBUG:
+        tracer_provider.add_span_processor(
+            BatchSpanProcessor(ConsoleSpanExporter())
+        )
+    
+    trace.set_tracer_provider(tracer_provider)
+
+    # Setup metrics with Prometheus
+    prometheus_reader = PrometheusMetricReader()
+    meter_provider = MeterProvider(
+        resource=resource,
+        metric_readers=[prometheus_reader],
+    )
+    metrics.set_meter_provider(meter_provider)
+
+
+def get_tracer(name: str) -> trace.Tracer:
+    """Get a tracer instance.
+
+    Args:
+        name: Tracer name (usually __name__)
+
+    Returns:
+        OpenTelemetry tracer
+    """
+    return trace.get_tracer(name)
+
+
+def get_meter(name: str) -> metrics.Meter:
+    """Get a meter instance.
+
+    Args:
+        name: Meter name (usually __name__)
+
+    Returns:
+        OpenTelemetry meter
+    """
+    return metrics.get_meter(name)
+

@@ -1,0 +1,149 @@
+# Azure DevOps Pipeline for {{ project_name }}
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    exclude:
+      - README.md
+      - docs/*
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+variables:
+  pythonVersion: '3.11'
+  imageName: '{{ project_slug }}'
+  dockerRegistryServiceConnection: 'your-acr-connection'
+  containerRegistry: 'yourregistry.azurecr.io'
+
+stages:
+  - stage: Test
+    displayName: 'Test Stage'
+    jobs:
+      - job: UnitTests
+        displayName: 'Run Unit Tests'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python $(pythonVersion)'
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install poetry
+              poetry install
+            displayName: 'Install dependencies'
+
+          - script: |
+              poetry run pytest --cov=app --cov=worker --cov-report=xml --cov-report=html
+            displayName: 'Run tests with coverage'
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '**/test-results.xml'
+              failTaskOnFailedTests: true
+            displayName: 'Publish test results'
+
+          - task: PublishCodeCoverageResults@1
+            inputs:
+              codeCoverageTool: 'Cobertura'
+              summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage.xml'
+            displayName: 'Publish coverage results'
+
+      - job: Lint
+        displayName: 'Code Quality Checks'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python $(pythonVersion)'
+
+          - script: |
+              python -m pip install --upgrade pip
+              pip install poetry
+              poetry install
+            displayName: 'Install dependencies'
+
+          - script: |
+              poetry run black --check .
+            displayName: 'Check code formatting'
+
+          - script: |
+              poetry run ruff check .
+            displayName: 'Run linter'
+
+          - script: |
+              poetry run mypy app worker
+            displayName: 'Type checking'
+
+  - stage: Build
+    displayName: 'Build Stage'
+    dependsOn: Test
+    condition: and(succeeded(), in(variables['Build.SourceBranch'], 'refs/heads/main', 'refs/heads/develop'))
+    jobs:
+      - job: BuildAndPush
+        displayName: 'Build and Push Docker Image'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: Docker@2
+            displayName: 'Build Docker image'
+            inputs:
+              command: build
+              repository: $(imageName)
+              dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+              tags: |
+                $(Build.BuildId)
+                latest
+
+          - task: Docker@2
+            displayName: 'Push Docker image'
+            inputs:
+              command: push
+              repository: $(imageName)
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(Build.BuildId)
+                latest
+
+  - stage: Deploy
+    displayName: 'Deploy Stage'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployToProduction
+        displayName: 'Deploy to Production'
+        environment: 'production'
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: HelmDeploy@0
+                  displayName: 'Deploy with Helm'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceConnection: 'your-k8s-connection'
+                    namespace: 'production'
+                    command: 'upgrade'
+                    chartType: 'FilePath'
+                    chartPath: '$(Pipeline.Workspace)/helm'
+                    releaseName: '{{ project_slug }}'
+                    overrideValues: |
+                      image.repository=$(containerRegistry)/$(imageName)
+                      image.tag=$(Build.BuildId)
+                    install: true
+                    waitForExecution: true
+

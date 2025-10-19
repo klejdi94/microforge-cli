@@ -1,0 +1,78 @@
+"""FastAPI application entrypoint."""
+
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from prometheus_client import make_asgi_app
+
+from app.core.config import settings
+from app.core.logging import setup_logging
+from app.core.telemetry import setup_telemetry
+from app.routes import health
+{% if use_postgres %}
+from app.db.database import engine, Base
+{% endif %}
+
+# Setup logging
+setup_logging()
+
+# Setup telemetry
+setup_telemetry()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan events."""
+    # Startup
+    {% if use_postgres %}
+    # Create database tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    {% endif %}
+    yield
+    # Shutdown
+    {% if use_postgres %}
+    await engine.dispose()
+    {% endif %}
+
+
+# Create FastAPI app
+app = FastAPI(
+    title=settings.APP_NAME,
+    description="{{ project_name }} microservice API",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(health.router, tags=["health"])
+
+# Prometheus metrics endpoint
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
+
+# Instrument with OpenTelemetry
+FastAPIInstrumentor.instrument_app(app)
+
+
+@app.get("/")
+async def root() -> dict[str, str]:
+    """Root endpoint."""
+    return {
+        "service": settings.APP_NAME,
+        "version": "0.1.0",
+        "status": "running",
+    }
+

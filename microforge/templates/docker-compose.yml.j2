@@ -1,0 +1,161 @@
+version: '3.8'
+
+services:
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: {{ project_slug }}_api
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME={{ project_name }}
+      - APP_ENV=development
+      - LOG_LEVEL=INFO
+      {% if use_redis %}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      {% elif use_kafka %}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - CELERY_BROKER_URL=kafka://kafka:9092
+      {% endif %}
+      {% if use_postgres %}
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/{{ project_slug }}
+      {% endif %}
+    depends_on:
+      {% if use_redis %}
+      - redis
+      {% endif %}
+      {% if use_kafka %}
+      - kafka
+      {% endif %}
+      {% if use_postgres %}
+      - postgres
+      {% endif %}
+    volumes:
+      - ./app:/app/app
+      - ./worker:/app/worker
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - {{ project_slug }}_network
+
+  # Celery Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: {{ project_slug }}_worker
+    environment:
+      - APP_NAME={{ project_name }}
+      - APP_ENV=development
+      - LOG_LEVEL=INFO
+      {% if use_redis %}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      {% elif use_kafka %}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - CELERY_BROKER_URL=kafka://kafka:9092
+      {% endif %}
+      {% if use_postgres %}
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/{{ project_slug }}
+      {% endif %}
+    depends_on:
+      {% if use_redis %}
+      - redis
+      {% endif %}
+      {% if use_kafka %}
+      - kafka
+      {% endif %}
+      {% if use_postgres %}
+      - postgres
+      {% endif %}
+    volumes:
+      - ./app:/app/app
+      - ./worker:/app/worker
+    command: celery -A worker.worker worker --loglevel=info
+    networks:
+      - {{ project_slug }}_network
+
+  {% if use_redis %}
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: {{ project_slug }}_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - {{ project_slug }}_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  {% endif %}
+
+  {% if use_kafka %}
+  # Zookeeper (required for Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: {{ project_slug }}_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - {{ project_slug }}_network
+
+  # Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: {{ project_slug }}_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - {{ project_slug }}_network
+  {% endif %}
+
+  {% if use_postgres %}
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: {{ project_slug }}_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: {{ project_slug }}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - {{ project_slug }}_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  {% endif %}
+
+networks:
+  {{ project_slug }}_network:
+    driver: bridge
+
+volumes:
+  {% if use_redis %}
+  redis_data:
+  {% endif %}
+  {% if use_postgres %}
+  postgres_data:
+  {% endif %}
+

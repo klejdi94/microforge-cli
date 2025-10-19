@@ -1,0 +1,184 @@
+# {{ project_name }}
+
+A production-ready Python microservice built with FastAPI and Celery.
+
+## Features
+
+- **FastAPI** - Modern, fast web framework
+- **Celery** - Distributed task queue
+{% if use_redis %}
+- **Redis** - Message broker and caching
+{% endif %}
+{% if use_kafka %}
+- **Kafka** - Event streaming platform
+{% endif %}
+{% if use_postgres %}
+- **PostgreSQL** - Relational database
+{% endif %}
+- **OpenTelemetry** - Observability and tracing
+- **Prometheus** - Metrics collection
+- **Structlog** - Structured logging
+{% if use_oauth2 %}
+- **OAuth2** - Authentication and authorization
+{% endif %}
+- **Docker** - Containerization
+- **Helm** - Kubernetes deployment
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.9+
+- Poetry
+- Docker & Docker Compose
+
+### Installation
+
+```bash
+# Install dependencies
+poetry install
+
+# Copy environment file
+cp .env.example .env
+```
+
+### Running with Docker Compose
+
+```bash
+# Start all services
+docker-compose up
+
+# Run in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Running Locally
+
+```bash
+# Start the API server
+poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Start the Celery worker
+poetry run celery -A worker.worker worker --loglevel=info
+```
+
+## API Documentation
+
+Once running, visit:
+
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- Health Check: http://localhost:8000/health
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run with coverage
+poetry run pytest --cov=app --cov=worker
+
+# Run specific test
+poetry run pytest tests/test_health.py
+```
+
+### Code Quality
+
+```bash
+# Format code
+poetry run black .
+
+# Lint
+poetry run ruff check .
+
+# Type check
+poetry run mypy app worker
+```
+
+{% if use_postgres %}
+### Database Migrations
+
+```bash
+# Create migration
+poetry run alembic revision --autogenerate -m "description"
+
+# Run migrations
+poetry run alembic upgrade head
+
+# Rollback
+poetry run alembic downgrade -1
+```
+{% endif %}
+
+## Project Structure
+
+```
+{{ project_slug }}/
+├── app/                    # FastAPI application
+│   ├── main.py            # Application entrypoint
+│   ├── routes/            # API routes
+│   ├── core/              # Core functionality
+{% if use_postgres %}
+│   ├── db/                # Database models and connection
+{% endif %}
+{% if use_oauth2 %}
+│   └── auth/              # Authentication
+{% endif %}
+├── worker/                # Celery worker
+├── tests/                 # Test suite
+├── helm/                  # Kubernetes Helm chart
+├── Dockerfile             # Container image
+└── docker-compose.yml     # Local development setup
+```
+
+## Environment Variables
+
+Key environment variables (see `.env.example`):
+
+- `APP_NAME` - Application name
+- `APP_ENV` - Environment (dev, staging, prod)
+- `LOG_LEVEL` - Logging level
+{% if use_redis %}
+- `REDIS_URL` - Redis connection URL
+{% endif %}
+{% if use_kafka %}
+- `KAFKA_BOOTSTRAP_SERVERS` - Kafka brokers
+{% endif %}
+{% if use_postgres %}
+- `DATABASE_URL` - PostgreSQL connection URL
+{% endif %}
+
+## Deployment
+
+### Kubernetes with Helm
+
+```bash
+# Install
+helm install {{ project_slug }} ./helm
+
+# Upgrade
+helm upgrade {{ project_slug }} ./helm
+
+# Uninstall
+helm uninstall {{ project_slug }}
+```
+
+## Monitoring
+
+- **Metrics**: Exposed at `/metrics` endpoint
+- **Health**: Available at `/health` endpoint
+- **Tracing**: OpenTelemetry compatible
+
+## License
+
+MIT
+

@@ -1,0 +1,42 @@
+"""Database models."""
+
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.sql import func
+
+from app.db.database import Base
+
+
+class BaseModel(Base):
+    """Base model with common fields."""
+
+    __abstract__ = True
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class ExampleModel(BaseModel):
+    """Example database model.
+
+    Replace this with your actual models.
+    """
+
+    __tablename__ = "examples"
+
+    name = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    status = Column(String(50), default="active", nullable=False)
+
+    def __repr__(self) -> str:
+        """String representation."""
+        return f"<ExampleModel(id={self.id}, name='{self.name}')>"
+

@@ -1,0 +1,164 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ "{{ github.repository }}" }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ "{{ env.PYTHON_VERSION }}" }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ "{{ runner.os }}" }}-${{ "{{ hashFiles('**/poetry.lock') }}" }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: Run tests
+        run: |
+          poetry run pytest --cov=app --cov=worker --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ "{{ env.PYTHON_VERSION }}" }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Check code formatting
+        run: poetry run black --check .
+
+      - name: Run linter
+        run: poetry run ruff check .
+
+      - name: Type checking
+        run: poetry run mypy app worker
+
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ "{{ env.REGISTRY }}" }}
+          username: ${{ "{{ github.actor }}" }}
+          password: ${{ "{{ secrets.GITHUB_TOKEN }}" }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ "{{ env.REGISTRY }}" }}/${{ "{{ env.IMAGE_NAME }}" }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{ "{{branch}}" }}-
+            type=raw,value=latest,enable={{ "{{is_default_branch}}" }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ "{{ steps.meta.outputs.tags }}" }}
+          labels: ${{ "{{ steps.meta.outputs.labels }}" }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://{{ project_slug }}.example.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.13.0'
+
+      - name: Configure Kubernetes
+        run: |
+          echo "${{ "{{ secrets.KUBECONFIG }}" }}" > kubeconfig.yaml
+          export KUBECONFIG=kubeconfig.yaml
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install {{ project_slug }} ./helm \
+            --namespace production \
+            --create-namespace \
+            --set image.repository=${{ "{{ env.REGISTRY }}" }}/${{ "{{ env.IMAGE_NAME }}" }} \
+            --set image.tag=${{ "{{ github.sha }}" }} \
+            --wait
+

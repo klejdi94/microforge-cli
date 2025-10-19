@@ -1,0 +1,67 @@
+"""Health check endpoints."""
+
+from typing import Any
+
+from fastapi import APIRouter, status
+{% if use_redis %}
+from redis import Redis
+{% endif %}
+{% if use_postgres %}
+from sqlalchemy import text
+from app.db.database import get_session
+{% endif %}
+
+from app.core.config import settings
+
+router = APIRouter()
+
+
+@router.get("/health", status_code=status.HTTP_200_OK)
+async def health_check() -> dict[str, Any]:
+    """Basic health check endpoint."""
+    return {
+        "status": "healthy",
+        "service": settings.APP_NAME,
+        "environment": settings.APP_ENV,
+    }
+
+
+@router.get("/health/ready", status_code=status.HTTP_200_OK)
+async def readiness_check() -> dict[str, Any]:
+    """Readiness check with dependency validation."""
+    checks = {
+        "status": "ready",
+        "service": settings.APP_NAME,
+        "checks": {},
+    }
+
+    {% if use_redis %}
+    # Check Redis connection
+    try:
+        redis_client = Redis.from_url(settings.REDIS_URL)
+        redis_client.ping()
+        checks["checks"]["redis"] = "healthy"
+    except Exception as e:
+        checks["checks"]["redis"] = f"unhealthy: {str(e)}"
+        checks["status"] = "not ready"
+    {% endif %}
+
+    {% if use_postgres %}
+    # Check database connection
+    try:
+        async with get_session() as session:
+            await session.execute(text("SELECT 1"))
+        checks["checks"]["database"] = "healthy"
+    except Exception as e:
+        checks["checks"]["database"] = f"unhealthy: {str(e)}"
+        checks["status"] = "not ready"
+    {% endif %}
+
+    return checks
+
+
+@router.get("/health/live", status_code=status.HTTP_200_OK)
+async def liveness_check() -> dict[str, str]:
+    """Liveness check endpoint."""
+    return {"status": "alive"}
+

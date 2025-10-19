@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ "{{ include \"chart.fullname\" . }}" }}
+  labels:
+    {{ "{{- include \"chart.labels\" . | nindent 4 }}" }}
+    app.kubernetes.io/component: api
+spec:
+  {{ "{{- if not .Values.autoscaling.enabled }}" }}
+  replicas: {{ "{{ .Values.replicaCount }}" }}
+  {{ "{{- end }}" }}
+  selector:
+    matchLabels:
+      {{ "{{- include \"chart.selectorLabels\" . | nindent 6 }}" }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      annotations:
+        {{ "{{- with .Values.podAnnotations }}" }}
+        {{ "{{- toYaml . | nindent 8 }}" }}
+        {{ "{{- end }}" }}
+      labels:
+        {{ "{{- include \"chart.selectorLabels\" . | nindent 8 }}" }}
+        app.kubernetes.io/component: api
+    spec:
+      {{ "{{- with .Values.imagePullSecrets }}" }}
+      imagePullSecrets:
+        {{ "{{- toYaml . | nindent 8 }}" }}
+      {{ "{{- end }}" }}
+      serviceAccountName: {{ "{{ include \"chart.serviceAccountName\" . }}" }}
+      securityContext:
+        {{ "{{- toYaml .Values.podSecurityContext | nindent 8 }}" }}
+      containers:
+        - name: {{ "{{ .Chart.Name }}" }}
+          securityContext:
+            {{ "{{- toYaml .Values.securityContext | nindent 12 }}" }}
+          image: "{{ "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}" }}"
+          imagePullPolicy: {{ "{{ .Values.image.pullPolicy }}" }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: APP_NAME
+              value: {{ "{{ .Values.config.appName }}" }}
+            - name: APP_ENV
+              value: {{ "{{ .Values.config.appEnv }}" }}
+            - name: LOG_LEVEL
+              value: {{ "{{ .Values.config.logLevel }}" }}
+            {% if use_redis %}
+            - name: REDIS_URL
+              value: {{ "{{ .Values.config.redisUrl }}" }}
+            - name: CELERY_BROKER_URL
+              value: {{ "{{ .Values.config.redisUrl }}" }}
+            - name: CELERY_RESULT_BACKEND
+              value: {{ "{{ .Values.config.redisUrl }}" }}
+            {% endif %}
+            {% if use_kafka %}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ "{{ .Values.config.kafkaBootstrapServers }}" }}
+            {% endif %}
+            {% if use_postgres %}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ "{{ include \"chart.fullname\" . }}" }}-secrets
+                  key: database-url
+            {% endif %}
+          livenessProbe:
+            {{ "{{- toYaml .Values.livenessProbe | nindent 12 }}" }}
+          readinessProbe:
+            {{ "{{- toYaml .Values.readinessProbe | nindent 12 }}" }}
+          resources:
+            {{ "{{- toYaml .Values.resources | nindent 12 }}" }}
+      {{ "{{- with .Values.nodeSelector }}" }}
+      nodeSelector:
+        {{ "{{- toYaml . | nindent 8 }}" }}
+      {{ "{{- end }}" }}
+      {{ "{{- with .Values.affinity }}" }}
+      affinity:
+        {{ "{{- toYaml . | nindent 8 }}" }}
+      {{ "{{- end }}" }}
+      {{ "{{- with .Values.tolerations }}" }}
+      tolerations:
+        {{ "{{- toYaml . | nindent 8 }}" }}
+      {{ "{{- end }}" }}
+---
+{{ "{{- if .Values.worker.enabled }}" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ "{{ include \"chart.fullname\" . }}" }}-worker
+  labels:
+    {{ "{{- include \"chart.labels\" . | nindent 4 }}" }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ "{{ .Values.worker.replicaCount }}" }}
+  selector:
+    matchLabels:
+      {{ "{{- include \"chart.selectorLabels\" . | nindent 6 }}" }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{ "{{- include \"chart.selectorLabels\" . | nindent 8 }}" }}
+        app.kubernetes.io/component: worker
+    spec:
+      {{ "{{- with .Values.imagePullSecrets }}" }}
+      imagePullSecrets:
+        {{ "{{- toYaml . | nindent 8 }}" }}
+      {{ "{{- end }}" }}
+      serviceAccountName: {{ "{{ include \"chart.serviceAccountName\" . }}" }}
+      securityContext:
+        {{ "{{- toYaml .Values.podSecurityContext | nindent 8 }}" }}
+      containers:
+        - name: worker
+          securityContext:
+            {{ "{{- toYaml .Values.securityContext | nindent 12 }}" }}
+          image: "{{ "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}" }}"
+          imagePullPolicy: {{ "{{ .Values.image.pullPolicy }}" }}
+          command: ["celery", "-A", "worker.worker", "worker", "--loglevel=info"]
+          env:
+            - name: APP_NAME
+              value: {{ "{{ .Values.config.appName }}" }}
+            - name: APP_ENV
+              value: {{ "{{ .Values.config.appEnv }}" }}
+            - name: LOG_LEVEL
+              value: {{ "{{ .Values.config.logLevel }}" }}
+            {% if use_redis %}
+            - name: REDIS_URL
+              value: {{ "{{ .Values.config.redisUrl }}" }}
+            - name: CELERY_BROKER_URL
+              value: {{ "{{ .Values.config.redisUrl }}" }}
+            - name: CELERY_RESULT_BACKEND
+              value: {{ "{{ .Values.config.redisUrl }}" }}
+            {% endif %}
+            {% if use_kafka %}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ "{{ .Values.config.kafkaBootstrapServers }}" }}
+            {% endif %}
+            {% if use_postgres %}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ "{{ include \"chart.fullname\" . }}" }}-secrets
+                  key: database-url
+            {% endif %}
+          resources:
+            {{ "{{- toYaml .Values.worker.resources | nindent 12 }}" }}
+{{ "{{- end }}" }}
+
