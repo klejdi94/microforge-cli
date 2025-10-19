@@ -38,11 +38,14 @@ poetry publish
 
 ### 1. Configure Artifactory Repository
 
-Update `pyproject.toml` with your Artifactory URL:
+Configure Artifactory via Poetry commands:
 
-```toml
-[tool.poetry.repositories]
-artifactory = { url = "https://your-artifactory-url/api/pypi/pypi-local/simple/" }
+```bash
+# Add Artifactory repository
+poetry config repositories.artifactory https://your-artifactory-url/api/pypi/pypi-local/
+
+# Configure credentials
+poetry config http-basic.artifactory username password
 ```
 
 ### 2. Configure Credentials

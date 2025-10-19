@@ -58,7 +58,6 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 # Publishing configuration
-[tool.poetry.repositories]
-pypi = { url = "https://pypi.org/simple/" }
-artifactory = { url = "https://your-artifactory-url/api/pypi/pypi-local/simple/" }
+# Note: Repository configuration should be done via poetry config command
+# poetry config repositories.artifactory https://your-artifactory-url/api/pypi/pypi-local/
 
