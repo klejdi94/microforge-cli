@@ -3,12 +3,12 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from microforge.generator import ProjectGenerator
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description="A production-ready project generator for modern Python microservices.",
@@ -39,7 +39,7 @@ def main():
         parser.print_help()
 
 
-def create_project(args):
+def create_project(args: argparse.Namespace) -> None:
     """Create a new microservice project."""
     # Validate inputs
     if args.broker not in ["redis", "kafka"]:
@@ -108,7 +108,7 @@ def create_project(args):
         sys.exit(1)
 
 
-def show_version():
+def show_version() -> None:
     """Show version information."""
     from microforge import __version__
     print(f"Microforge version: {__version__}")
