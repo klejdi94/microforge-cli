@@ -1,4 +1,0 @@
-# Documentation build artifacts
-_build/
-*.pyc
-__pycache__/
