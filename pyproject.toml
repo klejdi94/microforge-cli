@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "microforge"
-version = "0.1.0"
+name = "microforge-cli"
+version = "0.1.1"
 description = "A production-ready project generator for modern Python microservices"
 authors = ["Klejdi <klejdi94@gmail.com>"]
 readme = "README.md"
